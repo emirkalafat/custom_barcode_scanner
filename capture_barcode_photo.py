@@ -7,11 +7,7 @@ cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # PiCamera kullanılacak
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-barcodeDetected = False
-
-# Ensure the outputs folder exists
-output_folder = "outputs"
-os.makedirs(output_folder, exist_ok=True)
+barcodeDetected = 0
 
 
 def enlarge_box(box, scale=25):
@@ -107,9 +103,11 @@ while True:
         closed.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
 
+    large_contours = [c for c in cnts if cv2.contourArea(c) > 5000]
+
     if len(cnts) > 0:
 
-        for c in cnts:
+        for c in large_contours:
 
             c = max(cnts, key=cv2.contourArea)  # Get the largest contour
             rect = cv2.minAreaRect(c)  # Get minimum area rectangle
@@ -117,18 +115,23 @@ while True:
 
             enlarged_box = enlarge_box(box)
             # Convert points to int
-            cv2.drawContours(img, [enlarged_box], -1, (0, 255, 0), 3)
+            cv2.drawContours(img, [enlarged_box], -1, (0, 255, 0), 1)
 
             rotated_roi = get_rotated_roi(img, enlarged_box)
 
             now = datetime.now()
             datetime_suffix = now.strftime("%Y%m%d_%H%M%S")
-            filename = f"detected_barcode_{datetime_suffix}.jpg"
-            filepath = os.path.join(output_folder, filename)
+            folder_suffix = now.strftime("%H%M")
+            output_folder = "outputs/" + folder_suffix
 
-            if not barcodeDetected:
+            if barcodeDetected < 5:
+                # Ensure the outputs folder exists
+                os.makedirs(output_folder, exist_ok=True)
+                filename = f"detected_barcode_{datetime_suffix}.jpg"
+                filepath = os.path.join(output_folder, filename)
+
                 cv2.imwrite(filepath, rotated_roi)
-                barcodeDetected = True
+                barcodeDetected = barcodeDetected + 1
 
     cv2.imshow("Gradient", img)
 
