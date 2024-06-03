@@ -10,7 +10,7 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 barcodeDetected = 0
 
 
-def enlarge_box(box, scale=25):
+def enlarge_box(box, scale=20):
     # Calculate the center of the box
     center = np.mean(box, axis=0)
 
@@ -88,7 +88,7 @@ while True:
     (_, thresh) = cv2.threshold(blurred, 225, 255, cv2.THRESH_BINARY)
 
     # construct a closing kernel and apply it to the thresholded image
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (42, 14))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 7))
     closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
     # perform a series of erosions and dilations
@@ -121,7 +121,7 @@ while True:
 
             now = datetime.now()
             datetime_suffix = now.strftime("%Y%m%d_%H%M%S")
-            folder_suffix = now.strftime("%H%M")
+            folder_suffix = now.strftime("%Y%m%d_%H%M")
             output_folder = "outputs/" + folder_suffix
 
             if barcodeDetected < 5:
