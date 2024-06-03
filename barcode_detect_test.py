@@ -1,11 +1,19 @@
-from PIL import Image, ImageFilter
-import numpy as np
-import matplotlib.pyplot as plt
 import math
-import cv2
+import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import interp1d
-from scipy.signal import resample
+from PIL import Image, ImageFilter
+
+
+def convert_to_binary(barcode_bits):
+    result = []
+    for i in range(0, len(barcode_bits), 4):
+        segment = barcode_bits[i : i + 4]
+        # Çoğunluk esasına göre 1 veya 0 belirleme
+        if segment.count("1") >= 2:
+            result.append("1")
+        else:
+            result.append("0")
+    return "".join(result)
 
 
 def extract_barcode_values(data: np.ndarray):
@@ -58,9 +66,9 @@ def extract_barcode_values(data: np.ndarray):
     print("data.max(): ", data.max())
     threshold = int((data.max() - data.min()) / 2)  # Eşik değeri
     print("threshold: ", threshold)
-    # binary_data = (data < threshold).astype(int)
+    binary_data = (data < threshold).astype(int)
 
-    # print("binary_data: ", binary_data)
+    print("binary_data: ", binary_data)
 
     # İlk siyah barı bulana kadar beyaz alanları atlayın
 
@@ -74,41 +82,9 @@ def extract_barcode_values(data: np.ndarray):
     barcode_data = data[start_index : end_index + 1]
     print("barcode_data: ", barcode_data)
 
-    dif_list = []
-    for i in range(len(barcode_data)):
-        dif_list.append({(barcode_data[i] - threshold): i})
-
-    print("\ndif_list: \n", dif_list)
-
-    dif_list = sorted(dif_list, key=lambda x: list(x.keys())[0])
-    print("\ndif_list: \n", dif_list)
-    print("\n")
-
-    n_multip = (end_index - start_index) % 95
-    dif_list = dif_list[
-        (len(dif_list) // 2) - (n_multip // 2) : (len(dif_list) // 2) + (n_multip // 2)
-    ]
-
-    dif_list = sorted(dif_list, key=lambda x: list(x.values())[0])
-
-    print("\ndif_list: \n", dif_list)
-
-    result_dif = []
-
-    for i in range(len(dif_list)):
-        result_dif.append(list(dif_list[i].keys())[0])
-
-    print("\nresult_dif: \n", result_dif)
-
-    barcode_data = [x + threshold for x in result_dif]
-
     # Barkod çubuk genişliği n piksel olarak hesapla
-    n = len(result_dif) // 95
+    n = len(barcode_data) // 95
     print("n: ", n)
-
-    barcode_data = [
-        int(np.mean(barcode_data[i : i + n])) for i in range(0, len(barcode_data), n)
-    ]
 
     binary_data = [0 if x > threshold else 1 for x in barcode_data]
 
@@ -118,6 +94,8 @@ def extract_barcode_values(data: np.ndarray):
     barcode_bits = "".join(barcode_data.astype(str))
     print("barcode_bits: ", barcode_bits)
     print("len(barcode_bits): ", len(barcode_bits))
+
+    barcode_bits = convert_to_binary(barcode_bits)
 
     # Başlangıç işaretini bul
     if not barcode_bits.startswith(start_guard):
@@ -171,8 +149,6 @@ def extract_barcode_values(data: np.ndarray):
 
     print("Start Index:", start_index)
     print("End Index:", end_index)
-    # print("Binary Data:", binary_data)
-    print("Barcode Data:", barcode_data)
     print("Left Groups:", left_groups)
     print("Right Groups:", right_groups)
     print("EAN-13 Code:", ean13_code)
