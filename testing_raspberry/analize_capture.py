@@ -3,6 +3,51 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageFilter
 
+from RPLCD.i2c import (
+    CharLCD,
+)  #!Bu import Raspberry Pi üzerinde çalışırken kullanılmalıdır.
+
+lcd = CharLCD(i2c_expander="PCF8574", address=0x27, port=1, cols=16, rows=2, dotsize=8)
+lcd.clear()
+
+
+def process_data(data, n, threshold):
+    index = 0
+    selected_groups = []
+    final_groups = []
+    a = int(n / 2)
+    while index + n - 1 <= len(data):
+        # Take the first a values from the current index
+
+        selected_values = data[index : index + n + a - 1]
+
+        # Split these a values into groups of a
+        groups = [selected_values[i : i + n] for i in range(a)]
+
+        # Calculate the average of each group
+        averages = [np.mean(group) for group in groups]
+
+        # Determine which group to select based on the condition
+        if min(averages) > threshold:
+            selected_group = groups[np.argmax(averages)]
+            final_groups.append(0)
+        else:
+            selected_group = groups[np.argmin(averages)]
+            final_groups.append(1)
+
+        # Add the selected group to the result list
+        selected_groups.extend(selected_group)
+
+        # Move the index to the next position after the selected group's last element
+        selected_group_index = next(
+            i for i, group in enumerate(groups) if np.array_equal(group, selected_group)
+        )
+        index += selected_group_index + n
+
+    print("selected_groups: ", len(selected_groups))
+    print("data: ", len(data))
+    return final_groups
+
 
 def convert_to_binary(barcode_bits):
     result = []
@@ -80,13 +125,13 @@ def extract_barcode_values(data: np.ndarray):
 
     # Barkod verilerini kırpın
     barcode_data = data[start_index : end_index + 1]
-    print("barcode_data: ", barcode_data)
+    print("barcode_data: \n", barcode_data)
 
     # Barkod çubuk genişliği n piksel olarak hesapla
     n = len(barcode_data) // 95
     print("n: ", n)
 
-    binary_data = [0 if x > threshold else 1 for x in barcode_data]
+    binary_data = process_data(barcode_data, n, threshold)
 
     # Barkod verilerini birleştir
     barcode_data = np.array(binary_data)
@@ -94,8 +139,6 @@ def extract_barcode_values(data: np.ndarray):
     barcode_bits = "".join(barcode_data.astype(str))
     print("barcode_bits: ", barcode_bits)
     print("len(barcode_bits): ", len(barcode_bits))
-
-    barcode_bits = convert_to_binary(barcode_bits)
 
     # Başlangıç işaretini bul
     if not barcode_bits.startswith(start_guard):
@@ -144,9 +187,6 @@ def extract_barcode_values(data: np.ndarray):
     total_sum = odd_sum + 3 * even_sum
     check_digit = (10 - (total_sum % 10)) % 10
 
-    # Bulunan barkod numarası ve kontrol hanesi
-    ean13_code.append(check_digit)
-
     print("Start Index:", start_index)
     print("End Index:", end_index)
     print("Left Groups:", left_groups)
@@ -183,9 +223,6 @@ def conservative_smoothing_gray(data, filter_size):
 
 def detect_barcode(image_path: str):
     # Barkod resmini yükleme ve siyah beyaz formatına çevirme
-    # image_path = "./test_barcode.jpg"
-    # image_path = "./outputs/20240525_1138/detected_barcode_20240525_113827.jpg"
-    # image_path = "./dirty_test_barcode_g.jpg"
     image = Image.open(image_path).convert("L")
 
     # Gürültüyü temizleme (medyan filtre kullanma)
@@ -199,7 +236,7 @@ def detect_barcode(image_path: str):
 
     # Temizlenmiş resmi gösterme
     plt.subplot(2, 1, 1)
-    plt.imshow(clean_image, cmap="grey")
+    plt.imshow(clean_image, cmap="gray")
     plt.title("Cleaned Image")
 
     # Ortadaki 64 piksel sütununu alarak her satırdaki ortalama değerini hesaplama
@@ -217,13 +254,6 @@ def detect_barcode(image_path: str):
     print("clean_average_values:\n", clean_average_values)
     print("len(clean_average_values): ", len(clean_average_values))
 
-    # out_file = image_path == "./test_barcode.jpg" if "out.txt" else "out_dirty.txt"
-
-    # f = open("out.txt", "a")
-    # text = str(clean_average_values)
-    # f.write(text)
-    # f.close()
-
     # Ortadaki 64 pikselin ortalama değerlerini bar grafikte gösterme
     plt.subplot(2, 1, 2)
     plt.bar(range(width), clean_average_values, color="gray")
@@ -233,12 +263,20 @@ def detect_barcode(image_path: str):
     plt.ylabel("Average Pixel Value")
 
     plt.tight_layout()
-    plt.show()
+    # plt.show() #Bu satırı comment silerek grafikleri görebilirsiniz.
 
     # Barkod değerlerini okuma ve sayısal değerini yazma
-    # barcode_numeric =
-    return extract_barcode_values(clean_average_values)
-    # print(f"Barkod Sayısal Değeri: {barcode_numeric}")
+
+    # ? Alttaki satırları comment-out yaparak barkod değerlerini LCD ekranına yazdırabilirsiniz.
+    #! Sadece Raspberry Pi üzerinde çalışırken kullanılabilir.
+    barcode_values_list = extract_barcode_values(clean_average_values)
+    barcode_values_string = ""
+    for s in barcode_values_list:
+        barcode_values_string += str(s)
+    lcd.write_string("Algilandi")
+    lcd._set_cursor_pos((1, 0))
+    lcd.write_string(barcode_values_string)
+    ######################################################################
 
 
-detect_barcode("test_barcode.jpg")
+# detect_barcode("test_barcode.jpg") #Bu satırı comment silerek test edebilirsiniz.

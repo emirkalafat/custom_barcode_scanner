@@ -1,21 +1,18 @@
-# python detect_barcode_opencv.py --image images/barcode_01.jpg
-
 # import the necessary packages
-from time import sleep
-import numpy as np
-import argparse
+from multiprocessing import process
 import cv2
-import matplotlib.pyplot as plt
-import os
-from cv2.typing import MatLike
+import numpy as np
+from picamera.array import (
+    PiRGBArray,
+)  #!Bu import Raspberry Pi üzerinde çalışırken kullanılmalıdır.
+from picamera import (
+    PiCamera,
+)  #!Bu import Raspberry Pi üzerinde çalışırken kullanılmalıdır.
+import time
 
-from barcode_detect_test import detect_barcode
+from analize_capture import detect_barcode
 
 show = 1
-
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # PiCamera kullanılacak
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
 
 # first a conservative filter for grayscale images will be defined.
@@ -100,7 +97,7 @@ def get_rotated_roi(img, box):
     return warped
 
 
-def capture_barcode_box(c: MatLike):
+def capture_barcode_box(c, img):
     rect = cv2.minAreaRect(c)  # Get minimum area rectangle
     box = cv2.boxPoints(rect).astype(int)  # Get box points
     enlarged_box = enlarge_box(box)
@@ -112,16 +109,23 @@ def capture_barcode_box(c: MatLike):
     return rotated_roi
 
 
-while True:
-    success, img = cap.read()
+# initialize the camera and grab a reference to the raw camera capture
+camera = PiCamera()
+camera.resolution = (1280, 720)
+camera.framerate = 30
+rawCapture = PiRGBArray(camera)
+# allow the camera to warmup
+time.sleep(0.1)
+# capture frames from the camera
+for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    # grab the raw NumPy array representing the image, then initialize the timestamp
+    # and occupied/unoccupied text
+    image = frame.array
 
-    # load the image and convert it to grayscale
-    image = img
-
-    # resize image
     image = cv2.resize(image, None, fx=1, fy=1, interpolation=cv2.INTER_CUBIC)
 
     # convert to grayscale
+
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # calculate x & y gradient
@@ -175,6 +179,8 @@ while True:
         closed.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )[-2:]
 
+    assert len(cnts) == 0, "No barcode detected!"
+
     c = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
     # c1 = sorted(cnts, key = cv2.contourArea, reverse = True)[1]
 
@@ -200,7 +206,7 @@ while True:
         (0, 255, 0),
         2,
     )
-    image = cv2.resize(image, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_CUBIC)
+    image = cv2.resize(image, None, fx=1, fy=1, interpolation=cv2.INTER_CUBIC)
 
     cv2.imshow("Image", image)
 
@@ -214,13 +220,16 @@ while True:
         )
         c = max(cnts, key=cv2.contourArea)
 
-        barcode = capture_barcode_box(c)
+        barcode = capture_barcode_box(c, image)
         cv2.imwrite("hoppala_barcode.jpg", barcode)
 
         detect_barcode("hoppala_barcode.jpg")
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):  # Break the loop if 'q' is pressed
+    key = cv2.waitKey(1) & 0xFF
+    # clear the stream in preparation for the next frame
+    rawCapture.truncate(0)
+    # if the q key was pressed, break from the loop
+    if key == ord("q"):
         break
 
-cap.release()
 cv2.destroyAllWindows()
